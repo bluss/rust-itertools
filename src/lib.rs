@@ -94,6 +94,7 @@ pub mod structs {
         FilterMapOk,
         FilterOk,
         Product,
+        Power,
         PutBack,
         Batching,
         MapInto,

@@ -15,7 +15,7 @@ pub use self::map::MapResults;
 pub use self::multi_product::*;
 
 use std::fmt;
-use std::iter::{Fuse, Peekable, FromIterator};
+use std::iter::{self, Fuse, Peekable, FromIterator};
 use std::marker::PhantomData;
 use crate::size_hint;
 
