@@ -373,19 +373,24 @@ pub enum Power<I>
 where
     I: Iterator,
 {
-    /// The adaptor is empty if either:
-    ///  - pow is 0
-    ///  - the original iterator is empty
-    ///  - the adaptor is exhausted
+    /// The adaptor is 'Empty' if either:
+    ///  - The original iterator is empty.
+    ///  - The adaptor is exhausted.
     Empty,
-    /// Otherwise, there will be items yielded.
+    /// The adaptor is 'Degenerated' if the given pow == 0.
+    /// In this case, it yields 1 empty item before switching to Empty itself.
+    /// This ensures that cartesian_power(it, n).count() == it.count().pow(n) for all n.
+    /// In the case it.is_empty() && n == 0, we choose convention 0^0=1.
+    Degenerated,
+    /// In any other case, there will be non-empty items yielded.
     Filled {
         /// Copy of the original iterator, never consumed.
         original: I,
-        /// Clones of the original iterator, scrolled at various speeds
+        /// Clones of the original iterator,
+        /// scrolled at various speeds from left to right
         /// and regularly replaced by fresh clones once exhausted.
         clones: Vec<I>,
-        /// Current state of the iterator: the next item to be yielded.
+        /// Current state of the iterator: the next non-empty item to be yielded.
         state: Vec<I::Item>,
     },
 }
@@ -399,14 +404,13 @@ where
     I::Item: Clone,
 {
     match pow {
-        // Trivial case.
-        0 => Power::Empty,
+        0 => Power::Degenerated,
         pow => {
             // Test one clone first to determine whether
             // some values are actually yielded by the given iterator.
             let mut first_clone = it.clone();
             match first_clone.next() {
-                // New trivial case: the given iterator is empty.
+                // No item will be yielded if the iterator is empty.
                 None => Power::Empty,
                 Some(first_state) => {
                     // Produce other clones until we have `pow` of them.
@@ -471,13 +475,19 @@ where
                 }
                 Some(res)
             }
-            // Check trivial case last as it should be less frequent.
+            // Check les frequent cases last.
             Power::Empty => None,
+            Power::Degenerated => {
+                // Yield One empty item and get exhausted.
+                *self = Power::Empty;
+                Some(Vec::new())
+            }
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         match self {
+            Power::Degenerated => (1, Some(1)),
             Power::Empty => (0, Some(0)),
             Power::Filled {
                 original, clones, ..

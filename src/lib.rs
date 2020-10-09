@@ -1003,6 +1003,13 @@ pub trait Itertools : Iterator {
     ///         ['b', 'b', 'b'],
     ///     ],
     /// );
+    ///
+    /// // Watch various possible degenerated cases:
+    /// let empty_result: Vec<Vec<char>> = vec![];
+    /// let singleton_result: Vec<Vec<char>> = vec![vec![]];
+    /// itertools::assert_equal("".chars().cartesian_power(3), empty_result.clone());
+    /// itertools::assert_equal("ab".chars().cartesian_power(0), singleton_result.clone());
+    /// itertools::assert_equal("".chars().cartesian_power(0), singleton_result.clone());
     /// ```
     fn cartesian_power(self, pow: usize) -> Power<Self>
     where
