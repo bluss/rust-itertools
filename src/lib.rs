@@ -95,6 +95,7 @@ pub mod structs {
         FilterMapOk,
         FilterOk,
         Product,
+        Power,
         PutBack,
         Batching,
         MapInto,
@@ -1081,6 +1082,44 @@ pub trait Itertools : Iterator {
               J::IntoIter: Clone
     {
         adaptors::cartesian_product(self, other.into_iter())
+    }
+
+    /// Return an iterator adaptor that iterates over the cartesian power of
+    /// the element set of the iterator.
+    ///
+    /// Iterator element type is `Vec<Self::Item>`.
+    ///
+    /// ```
+    /// use itertools::Itertools;
+    ///
+    /// let it = "ab".chars().cartesian_power(3);
+    /// itertools::assert_equal(
+    ///     it,
+    ///     vec![
+    ///         ['a', 'a', 'a'],
+    ///         ['a', 'a', 'b'],
+    ///         ['a', 'b', 'a'],
+    ///         ['a', 'b', 'b'],
+    ///         ['b', 'a', 'a'],
+    ///         ['b', 'a', 'b'],
+    ///         ['b', 'b', 'a'],
+    ///         ['b', 'b', 'b'],
+    ///     ],
+    /// );
+    ///
+    /// // Watch various possible degenerated cases:
+    /// let empty_result: Vec<Vec<char>> = vec![];
+    /// let singleton_result: Vec<Vec<char>> = vec![vec![]];
+    /// itertools::assert_equal("".chars().cartesian_power(3), empty_result.clone());
+    /// itertools::assert_equal("ab".chars().cartesian_power(0), singleton_result.clone());
+    /// itertools::assert_equal("".chars().cartesian_power(0), singleton_result.clone());
+    /// ```
+    fn cartesian_power(self, pow: usize) -> Power<Self>
+    where
+        Self: Sized + Clone,
+        Self::Item: Clone,
+    {
+        adaptors::cartesian_power(self, pow)
     }
 
     /// Return an iterator adaptor that iterates over the cartesian product of

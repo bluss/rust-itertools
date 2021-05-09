@@ -15,7 +15,7 @@ pub use self::map::MapResults;
 pub use self::multi_product::*;
 
 use std::fmt;
-use std::iter::{Fuse, Peekable, FromIterator};
+use std::iter::{self, Fuse, Peekable, FromIterator};
 use std::marker::PhantomData;
 use crate::size_hint;
 
@@ -358,6 +358,152 @@ impl<I, J> Iterator for Product<I, J>
             }
         }
         accum
+    }
+}
+
+#[derive(Debug, Clone)]
+/// An iterator adaptor that iterates over the cartesian power of
+/// the element set of iterator `I`.
+///
+/// Iterator element type is `Vec<I::Item>`, with length `pow`.
+///
+/// See [`.cartesian_power()`](../trait.Itertools.html#method.cartesian_power) for more information.
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
+pub enum Power<I>
+where
+    I: Iterator,
+{
+    /// The adaptor is 'Empty' if either:
+    ///  - The original iterator is empty.
+    ///  - The adaptor is exhausted.
+    Empty,
+    /// The adaptor is 'Degenerated' if the given pow == 0.
+    /// In this case, it yields 1 empty item before switching to Empty itself.
+    /// This ensures that cartesian_power(it, n).count() == it.count().pow(n) for all n.
+    /// In the case it.is_empty() && n == 0, we choose convention 0^0=1.
+    Degenerated,
+    /// In any other case, there will be non-empty items yielded.
+    Filled {
+        /// Copy of the original iterator, never consumed.
+        original: I,
+        /// Clones of the original iterator,
+        /// scrolled at various speeds from left to right
+        /// and regularly replaced by fresh clones once exhausted.
+        clones: Vec<I>,
+        /// Current state of the iterator: the next non-empty item to be yielded.
+        state: Vec<I::Item>,
+    },
+}
+
+/// Create a new cartesian power iterator.
+///
+/// Iterator element type is `Vec<I::Item>` with length `pow`.
+pub fn cartesian_power<I>(it: I, pow: usize) -> Power<I>
+where
+    I: Iterator + Clone,
+    I::Item: Clone,
+{
+    match pow {
+        0 => Power::Degenerated,
+        pow => {
+            // Test one clone first to determine whether
+            // some values are actually yielded by the given iterator.
+            let mut first_clone = it.clone();
+            match first_clone.next() {
+                // No item will be yielded if the iterator is empty.
+                None => Power::Empty,
+                Some(first_state) => {
+                    // Produce other clones until we have `pow` of them.
+                    let mut clones = iter::once(first_clone)
+                        .chain((0..(pow - 1)).map(|_| it.clone()))
+                        .collect::<Vec<_>>();
+                    Power::Filled {
+                        // Prepare initial state and ensure that all clones have been stepped once.
+                        state: iter::once(first_state)
+                            .chain((1..pow).map(|i| clones[i].next().unwrap()))
+                            .collect::<Vec<_>>(),
+                        clones,
+                        original: it,
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl<I> Iterator for Power<I>
+where
+    I: Iterator + Clone,
+    I::Item: Clone,
+{
+    type Item = Vec<I::Item>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Power::Filled {
+                original,
+                clones,
+                state,
+            } => {
+                // Prepare a copy of current state to be yielded to user.
+                let res = state.clone();
+                // Scroll right clone first.
+                for i in (0..clones.len()).rev() {
+                    match clones[i].next() {
+                        Some(next_value) => {
+                            state[i] = next_value;
+                            // No need to step left clones
+                            // while this one is not exhausted.
+                            break;
+                        }
+                        None => {
+                            if i > 0 {
+                                // When a clone is exhausted,
+                                // replace with a fresh one
+                                // and go step the clone to the left.
+                                let mut fresh_clone = original.clone();
+                                state[i] = fresh_clone.next().unwrap();
+                                clones[i] = fresh_clone;
+                            } else {
+                                // When the leftmost clone is exhausted,
+                                // then the cartesian power is exhausted.
+                                *self = Power::Empty;
+                                break; // (useless, but reassures the borrow-checker)
+                            }
+                        }
+                    }
+                }
+                Some(res)
+            }
+            // Check les frequent cases last.
+            Power::Empty => None,
+            Power::Degenerated => {
+                // Yield One empty item and get exhausted.
+                *self = Power::Empty;
+                Some(Vec::new())
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            Power::Degenerated => (1, Some(1)),
+            Power::Empty => (0, Some(0)),
+            Power::Filled {
+                original, clones, ..
+            } => {
+                // Exactly original.count()^pow items are expected,
+                // but this may be larger than usize?
+
+                // Is there no size_hint::pow_scalar ?
+                let factor = original.size_hint();
+                let mut accumulator = factor;
+                for _ in 0..clones.len() {
+                    accumulator = size_hint::mul(accumulator, factor)
+                }
+                accumulator
+            }
+        }
     }
 }
 
